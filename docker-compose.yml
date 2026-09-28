@@ -26,7 +26,8 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      # Chỉ mở cho chính máy này — Redis không có mật khẩu, không để lộ ra mạng LAN/Wi-Fi
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -35,10 +36,31 @@ services:
       timeout: 3s
       retries: 5
 
-  # TODO (CP2): khai báo service `agent` ở đây
-  # agent:
-  #   build: .
-  #   ...
+  agent:
+    build: .
+    ports:
+      # Chỉ mở cho máy này. Khi --scale agent=3 thì bỏ `ports` và đi qua nginx.
+      - "127.0.0.1:8000:8000"
+    environment:
+      # Secret đọc từ .env cạnh file này — thiếu thì compose dừng ngay (fail fast)
+      AGENT_API_KEY: ${AGENT_API_KEY:?AGENT_API_KEY chua duoc dat trong .env}
+      # Trong mạng compose, tên service `redis` chính là hostname
+      REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-10}
+      MONTHLY_BUDGET_USD: ${MONTHLY_BUDGET_USD:-10.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    # Thời gian chờ graceful shutdown trước khi Docker SIGKILL (CP4)
+    stop_grace_period: 30s
+    restart: unless-stopped
 
 volumes:
   redis-data:
