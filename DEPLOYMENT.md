@@ -1,26 +1,24 @@
 # Thông Tin Deploy — Checkpoint 5
 
-> Điền file này sau khi deploy xong. `pytest tests/test_cp5.py` đọc file này
-> để tìm địa chỉ service của bạn và gọi thử.
+> `pytest tests/test_cp5.py` đọc file này để tìm địa chỉ service và gọi thử.
 >
-> **Chỉ ghi TÊN biến môi trường, tuyệt đối không dán giá trị API key vào đây.**
-> Repo này công khai — dán khóa vào là mất khóa.
+> **Chỉ ghi TÊN biến môi trường, không ghi giá trị secret.**
 
 ## Thông Tin Học Viên
 
 | Mục | Nội dung |
 |-----|----------|
-| Họ và tên | (điền họ tên) |
-| Mã học viên | (điền mã học viên) |
-| Repo | (điền link repo K4-L3A-DAY12-HoVaTen-MSSV-CloudServicesAndDeployment) |
+| Họ và tên | Đặng Hữu Tâm |
+| Mã học viên | 2A202602940 |
+| Repo | https://github.com/tam253211-a11y/K4-L3A-DAY12-DangHuuTam-2A202602940-CloudServicesAndDeployment |
 
 ## Service
 
 | Mục | Nội dung |
 |-----|----------|
-| Public URL | https://TODO-thay-bang-url-that.up.railway.app |
-| Platform | Railway / Render / Cloud Run — (điền platform bạn dùng) |
-| Ngày deploy | (điền ngày) |
+| Public URL | https://day12-agent-production-5964.up.railway.app |
+| Platform | Railway (build từ `Dockerfile`, cấu hình `railway.toml`) |
+| Ngày deploy | 2026-09-28 |
 
 ## Biến Môi Trường Đã Set Trên Cloud
 
@@ -28,9 +26,9 @@ Ghi tên biến và **nguồn giá trị**, không ghi giá trị:
 
 | Biến | Đã set | Ghi chú |
 |------|--------|---------|
-| `PORT` | ✅ | platform tự gán |
-| `AGENT_API_KEY` | ✅ | đặt trong dashboard, không nằm trong repo |
-| `REDIS_URL` | ✅ | (điền: Redis add-on của platform / Upstash / ...) |
+| `PORT` | ✅ | Railway tự gán (8080), không tự đặt |
+| `AGENT_API_KEY` | ✅ | khóa riêng cho cloud, đặt trong tab Variables của Railway, không nằm trong repo |
+| `REDIS_URL` | ✅ | tham chiếu `${{day12-redis.REDIS_URL}}` tới service Redis của Railway (mạng nội bộ) |
 | `RATE_LIMIT_PER_MINUTE` | ✅ | 10 |
 | `MONTHLY_BUDGET_USD` | ✅ | 10.0 |
 | `LOG_LEVEL` | ✅ | INFO |
@@ -70,32 +68,45 @@ done; echo
 
 ## Kết Quả Chạy Thật
 
-Dán output của các lệnh trên vào đây:
+Chạy ngày 2026-09-28 vào `https://day12-agent-production-5964.up.railway.app`
+(khóa API lấy từ biến môi trường, không in ra):
 
 ```
-(điền output)
+# 1. /health
+HTTP/2 200
+content-type: application/json
+{"status":"ok","service":"day12-agent","version":"1.0.0"}
+
+# 2. /ready
+HTTP/2 200
+{"status":"ready","redis":true}
+
+# 3. /ask không có API key
+HTTP/2 401
+{"detail":"invalid or missing API key"}
+
+# 4. /ask có API key (X-User-Id: sv-test)
+HTTP 200
+{"answer": "Câu hỏi hay. Deploy là gì thường được giải quyết bằng cách chuẩn hóa môi trường chạy: cùng một image chạy giống nhau ở laptop và trên cloud.", "user_id": "sv-test", "history_length": 0, "cost_usd": 2.145e-05, "tokens": {"in": 3, "out": 35}}
+
+# 5. Rate limit — 15 lần liên tiếp, hạn mức 10/phút
+200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
+```
+
+Deploy log trên Railway xác nhận app đọc `$PORT` và uvicorn là PID 1 (nhận SIGTERM):
+
+```
+INFO:     Started server process [1]
+{"event": "service_started", "level": "info", ..., "service": "day12-agent", "version": "1.0.0"}
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+INFO:     100.64.0.1:58855 - "GET /health HTTP/1.1" 200 OK
 ```
 
 ## Ảnh Chụp Màn Hình
 
-Đặt ảnh trong thư mục `screenshots/`:
+Ảnh trong thư mục `screenshots/`:
 
-- `screenshots/dashboard.png` — trang quản lý service trên platform
-- `screenshots/health.png` — kết quả gọi `/health` từ trình duyệt hoặc curl
-
----
-
-## Nếu Dùng Phương Án Dự Phòng
-
-Không đăng ký được tài khoản cloud? Vẫn nộp được bài, nhưng CP5 tối đa 60% điểm:
-
-1. Đặt `LOCAL_FALLBACK=true` trong `.env`
-2. Chạy `docker compose up -d` rồi kiểm tra `docker compose ps`
-3. Chụp màn hình vào `screenshots/`
-4. Chạy `pytest tests/test_cp5.py -v` — bộ test sẽ tự chuyển sang kiểm tra
-   `http://localhost:8000`
-5. Ghi rõ lý do không deploy được vào phần dưới đây:
-
-```
-(điền lý do nếu dùng phương án dự phòng, ngược lại xóa mục này)
-```
+- `screenshots/dashboard.png` — project Railway: `day12-agent` và `day12-redis` đều Online
+- `screenshots/health.png` — kết quả gọi `/health` trên trình duyệt
+- `screenshots/deploy-logs.png` — deploy log: uvicorn PID 1, cổng 8080 từ `$PORT`, `/health` 200
+- `screenshots/rate-limit-logs.png` — log JSON `ask_completed`, 10 request 200 rồi 429
